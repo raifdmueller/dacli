@@ -26,6 +26,24 @@ def test_index_document_and_retrieve_section():
     assert retrieved_section.level == 2
     assert "Some content in level 1.\n" in retrieved_section.content
 
+def test_hierarchical_section_paths():
+    """Tests that sections are indexed with hierarchical paths."""
+    doc_path = str(FIXTURE_DIR / "simple.adoc")
+    parsed_document = parse_document(doc_path)
+
+    index = DocumentIndex()
+    index.add_document(parsed_document)
+
+    # Expected hierarchical path for the subsection
+    expected_path = "level-1-title/level-2-title"
+
+    # This will fail because the current _generate_section_path is not hierarchical
+    retrieved_section = index.get_section_by_path(expected_path)
+
+    assert retrieved_section is not None
+    assert retrieved_section.title == "Level 2 Title"
+    assert retrieved_section.level == 3
+
     # To make the test fail as intended, we'll try to instantiate the non-existent class
     # with pytest.raises(ImportError):
     #     from mcp_server.components.index import DocumentIndex

@@ -9,10 +9,12 @@ class DocumentIndex:
         self._sections: Dict[str, Section] = {}
         self._documents: Dict[str, Document] = {}
 
-    def _generate_section_path(self, section: Section) -> str:
-        """Generates a canonical path for a section (e.g., 'level-1-title')."""
-        # For now, just use the title, lowercased and hyphenated
-        return section.title.lower().replace(' ', '-')
+    def _generate_section_path(self, section: Section, parent_path: str = "") -> str:
+        """Generates a canonical path for a section (e.g., 'level-1-title/level-2-title')."""
+        slug = section.title.lower().replace(' ', '-')
+        if parent_path:
+            return f"{parent_path}/{slug}"
+        return slug
 
     def add_document(self, document: Document):
         """
@@ -20,11 +22,11 @@ class DocumentIndex:
         """
         self._documents[document.filepath] = document
 
-        def _add_sections_recursive(sections: List[Section]):
+        def _add_sections_recursive(sections: List[Section], parent_path: str = ""):
             for section in sections:
-                path = self._generate_section_path(section)
-                self._sections[path] = section
-                _add_sections_recursive(section.subsections)
+                current_path = self._generate_section_path(section, parent_path)
+                self._sections[current_path] = section
+                _add_sections_recursive(section.subsections, current_path)
 
         _add_sections_recursive(document.sections)
 

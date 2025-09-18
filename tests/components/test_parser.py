@@ -56,3 +56,18 @@ def test_parse_nonexistent_document():
     """Tests that a FileNotFoundError is raised for a non-existent file."""
     with pytest.raises(FileNotFoundError):
         parse_document("nonexistent_file.adoc")
+
+def test_parser_handles_simple_include():
+    """Tests that the parser correctly handles a simple 'include::[]' directive."""
+    doc_path = str(FIXTURE_DIR / "include_main.adoc")
+    document = parse_document(doc_path)
+
+    assert len(document.sections) == 1
+    main_section = document.sections[0]
+    assert main_section.title == "Main Document Section"
+    
+    # This is the part that will fail
+    assert len(main_section.subsections) == 1
+    included_section = main_section.subsections[0]
+    assert included_section.title == "Included Section"
+    assert "This content comes from the partial file.\n" in included_section.content

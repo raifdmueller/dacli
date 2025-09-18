@@ -1,0 +1,5 @@
+== Main Document Section
+
+This content is in the main file.
+
+include::include_partial.adoc[]

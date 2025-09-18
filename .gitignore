@@ -3,3 +3,6 @@
 
 # Zone Identifier files from Windows
 :Zone.Identifier
+
+# Virtual environment
+.venv/

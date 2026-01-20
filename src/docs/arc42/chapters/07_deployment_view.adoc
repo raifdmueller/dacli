@@ -15,7 +15,54 @@ This chapter describes the infrastructure and environment for the MCP Documentat
 
 === Deployment Strategy
 
-The application is designed to be lightweight and self-contained, in line with its constraints (no external services). The recommended deployment strategy is to package the Python application and its dependencies into a Docker container.
+The application is designed to be lightweight and self-contained, in line with its constraints (no external services). Two deployment strategies are supported:
+
+==== Local Development / MCP Integration
+
+For local development and MCP client integration, the server runs directly via uv:
+
+[source,bash]
+----
+# Install dependencies and run
+uv sync
+uv run python -m mcp_server --project-path /path/to/docs
+
+# Or configure in MCP client (e.g., Claude Desktop)
+# ~/.config/claude/claude_desktop_config.json
+{
+  "mcpServers": {
+    "docs-server": {
+      "command": "uv",
+      "args": ["run", "python", "-m", "mcp_server"],
+      "cwd": "/path/to/mcp-docs-server",
+      "env": {
+        "PROJECT_PATH": "/path/to/documentation"
+      }
+    }
+  }
+}
+----
+
+==== Docker Deployment
+
+For production or isolated environments, the application is packaged into a Docker container:
+
+[source,dockerfile]
+----
+FROM python:3.12-slim
+
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+WORKDIR /app
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
+
+COPY src/ ./src/
+EXPOSE 8000
+
+CMD ["uv", "run", "python", "-m", "mcp_server"]
+----
 
 The Web Interface (SPA) is a set of static files (HTML, CSS, JS) that can be served by any web server or even directly by the FastAPI backend for simplicity.
 

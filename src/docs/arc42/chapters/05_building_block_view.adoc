@@ -56,7 +56,9 @@ title Component diagram for MCP API Server
 
 Container_Boundary(api, "MCP API Server") {
     Component(api_endpoints, "API Endpoints", "FastAPI", "Receives MCP requests, validates input, and returns responses.")
-    Component(doc_service, "Document Service", "Python", "Orchestrates the business logic for use cases like get_section or update_section.")
+    Component(doc_service, "Document Service", "Python", "Orchestrates the business logic for navigation and manipulation use cases.")
+    Component(search_service, "Search Service", "Python", "Provides full-text search across indexed content.")
+    Component(validation_service, "Validation Service", "Python", "Validates document structure, detects issues like circular includes.")
     Component(parser, "Document Parser", "Python", "Parses AsciiDoc/Markdown files, resolves includes, and builds an Abstract Syntax Tree (AST).")
     Component(index, "Structure Index", "Python (In-Memory Dictionary)", "Stores the hierarchical structure of the documentation project for fast lookups.")
     Component(fs_handler, "File System Handler", "Python", "Performs atomic read/write operations on the file system.")
@@ -64,13 +66,66 @@ Container_Boundary(api, "MCP API Server") {
 
 System_Ext(file_system, "File System")
 
-Rel(api_endpoints, doc_service, "Uses", "Executes business logic")
+Rel(api_endpoints, doc_service, "Uses", "Navigation & Manipulation")
+Rel(api_endpoints, search_service, "Uses", "Content Search")
+Rel(api_endpoints, validation_service, "Uses", "Structure Validation")
 Rel(doc_service, parser, "Uses", "To get document AST on initialization")
 Rel(doc_service, index, "Uses", "To find section locations")
 Rel(doc_service, fs_handler, "Uses", "To read/write file content")
+Rel(search_service, index, "Queries")
+Rel(validation_service, index, "Analyzes")
 
 Rel(parser, fs_handler, "Reads files via")
 Rel(index, parser, "Is built by")
 Rel(fs_handler, file_system, "Interacts with")
 @enduml
 ----
+
+=== Component Responsibilities
+
+The following table maps components to the API groups defined in the specification:
+
+.Component to API Group Mapping
+[cols="2,2,3"]
+|===
+| Component | API Group | Use Cases
+
+| **API Endpoints**
+| All Groups
+| Request routing, validation, response formatting
+
+| **Document Service**
+| Navigation API, Manipulation API
+| UC-01, UC-02, UC-03, UC-09, UC-10
+
+| **Search Service**
+| Content Access API
+| UC-04 (search_content), UC-05 (get_elements)
+
+| **Validation Service**
+| Meta-Information API
+| UC-06 (get_metadata), UC-07 (validate_structure)
+
+| **Document Parser**
+| (Internal)
+| UC-08 (Server Initialization)
+
+| **Structure Index**
+| (Internal)
+| Supports all read operations
+
+| **File System Handler**
+| (Internal)
+| Supports all write operations, atomic writes (ADR-004)
+|===
+
+=== Data Models
+
+The following core data models are used across components (see API Specification for details):
+
+* **SectionLocation** - File path and line range for a section
+* **Section** - Hierarchical document section with metadata
+* **Element** - Typed content element (table, code, diagram)
+* **SearchResult** - Search hit with context and relevance score
+* **Metadata** - Document or section metadata
+* **ValidationResult** - Structure validation outcome

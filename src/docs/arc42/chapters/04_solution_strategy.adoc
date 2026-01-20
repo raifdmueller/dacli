@@ -29,11 +29,37 @@ To implement this strategy, the following technology stack is proposed. The choi
 [cols="1,2,3"]
 |===
 | Component | Technology | Justification
-| **Language** | **Python 3.11+** | Excellent for text processing, large standard library, strong community support, and mature libraries for parsing and web development.
+| **Language** | **Python 3.12+** | Excellent for text processing, large standard library, strong community support, and mature libraries for parsing and web development.
+| **Package Manager** | **uv** | Ultra-fast Python package installer and resolver. Provides deterministic builds via `uv.lock`, faster dependency resolution than pip/poetry, and integrated virtual environment management.
 | **Web Server / API** | **FastAPI** | Provides a high-performance, MCP-compliant web server with automatic data validation and API documentation, directly supporting **Usability** (USAB-1, USAB-2).
+| **MCP SDK** | **mcp[cli]** | Official MCP SDK for Python to ensure full protocol compliance.
 | **Document Parsing** | **Custom Parser Logic** | A custom parser will be developed to handle AsciiDoc/Markdown specifics, especially the critical requirement of resolving includes and tracking line numbers accurately. Off-the-shelf libraries often lack the required granularity. This directly addresses the risk of **Format Variations**.
 | **Diff Engine** | **difflib** | Python's standard library for generating diffs, sufficient for providing real-time feedback in the web UI (**Usability**, USAB-3).
 |===
+
+=== Development Environment Setup
+
+The project uses **uv** for Python environment and dependency management:
+
+[source,bash]
+----
+# Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Create virtual environment and install dependencies
+uv sync
+
+# Run the server
+uv run python -m mcp_server
+
+# Add a new dependency
+uv add <package-name>
+
+# Add a development dependency
+uv add --dev <package-name>
+----
+
+The `pyproject.toml` defines all dependencies, and `uv.lock` ensures reproducible builds across all environments.
 
 === Achieving Key Quality Goals
 

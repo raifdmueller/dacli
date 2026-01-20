@@ -25,6 +25,7 @@ The system must adhere to the following technical constraints, derived directly 
 | **Human-Readable Files** | Source documentation files (AsciiDoc, Markdown) must remain human-readable and editable with standard text editors at all times.
 | **Toolchain Compatibility** | The system must work with existing AsciiDoc and Markdown toolchains without requiring proprietary formats or modifications.
 | **Version Control Integration** | All operations must be compatible with standard Git workflows, ensuring that file changes can be tracked, committed, and reverted.
+| **Python Package Management** | Python dependencies must be managed using **uv** (https://github.com/astral-sh/uv) for fast, reliable dependency resolution and virtual environment management.
 |===
 
 === Organizational and Process Constraints

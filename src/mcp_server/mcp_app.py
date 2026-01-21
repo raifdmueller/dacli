@@ -22,7 +22,7 @@ from mcp_server import __version__
 from mcp_server.asciidoc_parser import AsciidocParser
 from mcp_server.file_handler import FileReadError, FileSystemHandler, FileWriteError
 from mcp_server.markdown_parser import MarkdownParser
-from mcp_server.models import Document, Section
+from mcp_server.models import Document, Element, Section
 from mcp_server.structure_index import StructureIndex
 
 # Configure logging to stderr (stdout is reserved for MCP protocol)
@@ -233,6 +233,15 @@ def create_mcp_server(docs_root: Path | str | None = None) -> FastMCP:
             section_path=section_path,
         )
 
+        def build_preview(elem: Element) -> str | None:
+            """Build preview string from element attributes."""
+            if not elem.attributes:
+                return None
+            attr_parts = []
+            for key, value in list(elem.attributes.items())[:3]:
+                attr_parts.append(f"{key}={value}")
+            return ", ".join(attr_parts) if attr_parts else None
+
         return {
             "elements": [
                 {
@@ -243,7 +252,7 @@ def create_mcp_server(docs_root: Path | str | None = None) -> FastMCP:
                         "start_line": e.source_location.line,
                         "end_line": e.source_location.end_line,
                     },
-                    "preview": e.content[:100] if e.content else None,
+                    "preview": build_preview(e),
                 }
                 for e in elements
             ],

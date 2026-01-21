@@ -134,10 +134,13 @@ def update_section(
 
     # Prepare content
     new_content = request.content
-    if request.preserve_title and not new_content.strip().startswith("="):
-        # Prepend the original title line
-        level_markers = "=" * (section.level + 1)
-        new_content = f"{level_markers} {section.title}\n\n{new_content}"
+    if request.preserve_title:
+        stripped_content = new_content.lstrip()
+        has_explicit_title = stripped_content.startswith("=") or stripped_content.startswith("#")
+        if not has_explicit_title:
+            # Prepend the original title line
+            level_markers = "=" * (section.level + 1)
+            new_content = f"{level_markers} {section.title}\n\n{new_content}"
 
     # Ensure content ends with newline
     if not new_content.endswith("\n"):

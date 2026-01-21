@@ -171,7 +171,7 @@ class FileSystemHandler:
 
             # Step 3: Atomic rename (replace original)
             try:
-                # os.replace is atomic on POSIX systems
+                # os.replace provides atomic file replacement on POSIX and Windows
                 os.replace(temp_path, path)
                 temp_created = False  # temp file is now the target
                 logger.debug(f"Replaced {path} with temp file")

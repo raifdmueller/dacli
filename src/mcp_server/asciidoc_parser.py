@@ -227,7 +227,7 @@ class AsciidocParser:
         )
 
         # Parse elements with section context
-        elements = self._parse_elements(expanded_lines, sections)
+        elements = self._parse_elements(expanded_lines, sections, attributes)
 
         # Parse cross-references
         cross_references = self._parse_cross_references(expanded_lines)
@@ -443,12 +443,14 @@ class AsciidocParser:
         self,
         lines: list[tuple[str, Path, int, SourceLocation | None]],
         sections: list[Section],
+        attributes: dict[str, str],
     ) -> list[Element]:
         """Parse elements from document lines.
 
         Args:
             lines: Expanded lines with source info
             sections: Parsed sections for parent context
+            attributes: Document attributes for substitution
 
         Returns:
             List of extracted elements
@@ -468,7 +470,7 @@ class AsciidocParser:
                 title = section_match.group(2).strip()
                 # Apply attribute substitution to section titles so they match
                 # the substituted titles stored in `sections`.
-                if "attributes" in locals() and attributes:
+                if attributes:
                     def _sub_attr(match: re.Match) -> str:
                         name = match.group(1)
                         return attributes.get(name, match.group(0))

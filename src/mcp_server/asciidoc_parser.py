@@ -104,8 +104,10 @@ class AsciidocDocument(Document):
 class AsciidocParser:
     """Parser for AsciiDoc documents.
 
-    Parses AsciiDoc files and extracts structure, elements, and references.
-    Currently implements section extraction (AC-ADOC-01).
+    Parses AsciiDoc files and extracts structure, elements, cross-references,
+    and includes, providing the full AsciiDoc parsing functionality required
+    by the MCP documentation server (including section extraction
+    as defined in AC-ADOC-01).
 
     Attributes:
         base_path: Base path for resolving relative file paths

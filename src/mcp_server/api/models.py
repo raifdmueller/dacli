@@ -14,7 +14,8 @@ class LocationResponse(BaseModel):
     """Location of a section in a source file."""
 
     file: str = Field(description="Relative path to the file")
-    line: int = Field(description="1-based line number")
+    line: int = Field(description="1-based start line number")
+    end_line: int | None = Field(default=None, description="1-based end line number")
 
 
 class SectionResponse(BaseModel):

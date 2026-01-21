@@ -171,6 +171,42 @@ class TestSourceLocation:
         assert kapitel1.source_location.line == 3  # "== Kapitel 1" is on line 3
 
 
+class TestDocumentAttributes:
+    """Tests for document attribute parsing (AC-ADOC-02)."""
+
+    def test_parse_attributes_from_document(self):
+        """Test that document attributes are extracted."""
+        from mcp_server.asciidoc_parser import AsciidocParser
+
+        parser = AsciidocParser(base_path=FIXTURES_DIR)
+        doc = parser.parse_file(FIXTURES_DIR / "with_attributes.adoc")
+
+        assert "author" in doc.attributes
+        assert doc.attributes["author"] == "Max Mustermann"
+
+    def test_parse_multiple_attributes(self):
+        """Test that multiple attributes are extracted."""
+        from mcp_server.asciidoc_parser import AsciidocParser
+
+        parser = AsciidocParser(base_path=FIXTURES_DIR)
+        doc = parser.parse_file(FIXTURES_DIR / "with_attributes.adoc")
+
+        assert doc.attributes["author"] == "Max Mustermann"
+        assert doc.attributes["project"] == "MCP Server"
+        assert doc.attributes["version"] == "1.0.0"
+        assert doc.attributes["imagesdir"] == "./images"
+
+    def test_attribute_in_title_is_resolved(self):
+        """Test that attribute references in title are resolved."""
+        from mcp_server.asciidoc_parser import AsciidocParser
+
+        parser = AsciidocParser(base_path=FIXTURES_DIR)
+        doc = parser.parse_file(FIXTURES_DIR / "with_attributes.adoc")
+
+        # Title should have {project} resolved to "MCP Server"
+        assert doc.title == "MCP Server Dokumentation"
+
+
 class TestEdgeCases:
     """Tests for edge cases."""
 

@@ -53,11 +53,12 @@ def get_index() -> StructureIndex:
 
 
 def _find_section_end_line(index: StructureIndex, section_path: str) -> int:
-    """Find the end line of a section.
+    """Find the end line of a section's direct content.
 
-    Since SourceLocation only has start line, we estimate end line by:
-    1. Finding the next sibling section's start line - 1
-    2. Or using a reasonable default if no sibling exists
+    Since SourceLocation only has a start line, we estimate the end line by:
+    1. Finding the next section's (child or sibling) start line - 1, giving us
+       the end of this section's direct content
+    2. Or using a reasonable default if no later section exists
 
     This is a simplified implementation - proper end_line tracking
     should be added to the parser (see tech-debt).

@@ -359,9 +359,10 @@ class TestElementExtraction:
 
     def test_plantuml_block_without_optional_attributes(self):
         """Test that PlantUML block without name/format does not have None values."""
-        from mcp_server.asciidoc_parser import AsciidocParser
-        from pathlib import Path
         import tempfile
+        from pathlib import Path
+
+        from mcp_server.asciidoc_parser import AsciidocParser
 
         # Create a temporary test file with PlantUML block without attributes
         with tempfile.NamedTemporaryFile(
@@ -386,7 +387,7 @@ Alice -> Bob: Test
 
             plantuml_elements = [e for e in doc.elements if e.type == "plantuml"]
             assert len(plantuml_elements) == 1
-            
+
             # Ensure no None values in attributes
             attrs = plantuml_elements[0].attributes
             assert None not in attrs.values()

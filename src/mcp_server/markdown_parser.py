@@ -1,0 +1,617 @@
+"""Markdown Parser for GitHub Flavored Markdown documents.
+
+This module provides parsing capabilities for GFM documents as specified in
+04_markdown_parser.adoc. It extracts document structure (headings), elements
+(code blocks, tables, images), and YAML frontmatter.
+
+Key differences from AsciiDoc parser:
+- No include directives - folder hierarchy defines document structure
+- YAML frontmatter for metadata
+- ATX-style headings only (# to ######)
+"""
+
+import logging
+import re
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+from mcp_server.models import Element, Section, SourceLocation
+
+logger = logging.getLogger(__name__)
+
+# Regex patterns from spec
+HEADING_PATTERN = re.compile(r"^(#{1,6})\s+(.+?)(?:\s+#+)?$")
+FRONTMATTER_PATTERN = re.compile(r"^---\s*\n(.*?)\n---\s*(?:\n|$)", re.DOTALL)
+CODE_FENCE_PATTERN = re.compile(r"^(`{3,}|~{3,})([a-zA-Z0-9_+-]*)?\s*$")
+TABLE_ROW_PATTERN = re.compile(r"^\|(.+)\|$")
+TABLE_SEPARATOR_PATTERN = re.compile(r"^\|[\s:|-]+\|$")
+IMAGE_PATTERN = re.compile(r"!\[([^\]]*)\]\(([^)\s]+)(?:\s+\"([^\"]*)\")?\)")
+
+
+def slugify(text: str) -> str:
+    """Convert text to URL-friendly slug.
+
+    Args:
+        text: Text to slugify
+
+    Returns:
+        Lowercase, hyphenated slug
+    """
+    # Remove special characters (ASCII-only word chars), replace spaces with hyphens
+    slug = re.sub(r"[^\w\s-]", "", text.lower(), flags=re.ASCII)
+    slug = re.sub(r"[\s_]+", "-", slug)
+    slug = re.sub(r"-+", "-", slug)
+    return slug.strip("-")
+
+
+@dataclass
+class MarkdownDocument:
+    """A parsed Markdown document.
+
+    Attributes:
+        file_path: Path to the source file
+        title: Document title (from first H1 or frontmatter)
+        frontmatter: YAML frontmatter metadata
+        sections: Hierarchical list of sections
+        elements: Extractable elements (code, tables, images)
+    """
+
+    file_path: Path
+    title: str
+    frontmatter: dict[str, Any] = field(default_factory=dict)
+    sections: list[Section] = field(default_factory=list)
+    elements: list[Element] = field(default_factory=list)
+
+
+@dataclass
+class FolderDocument:
+    """A document composed of multiple Markdown files in a folder.
+
+    Attributes:
+        root_path: Path to the root folder
+        documents: List of parsed Markdown documents (sorted)
+        structure: Combined hierarchical structure from all documents.
+            NOTE: This field is not yet implemented and will always be empty.
+            Future implementation will merge section hierarchies from all
+            documents into a unified structure respecting folder boundaries.
+    """
+
+    root_path: Path
+    documents: list[MarkdownDocument] = field(default_factory=list)
+    structure: list[Section] = field(default_factory=list)
+
+
+class MarkdownParser:
+    """Parser for GitHub Flavored Markdown documents.
+
+    Parses single files or entire folder hierarchies into structured
+    documents with sections and extractable elements.
+    """
+
+    def parse_file(self, file_path: Path) -> MarkdownDocument:
+        """Parse a single Markdown file.
+
+        Args:
+            file_path: Path to the Markdown file
+
+        Returns:
+            Parsed MarkdownDocument
+
+        Raises:
+            FileNotFoundError: If file doesn't exist
+            UnicodeDecodeError: If file has invalid encoding
+        """
+        content = file_path.read_text(encoding="utf-8")
+
+        # Parse frontmatter first
+        frontmatter, content_without_frontmatter = self._parse_frontmatter(content)
+
+        lines = content_without_frontmatter.splitlines()
+
+        # Calculate line offset from frontmatter
+        frontmatter_lines = len(content.splitlines()) - len(lines)
+
+        # Parse sections (headings)
+        sections, heading_title = self._parse_sections(
+            lines, file_path, line_offset=frontmatter_lines
+        )
+
+        # Parse elements (code blocks, tables, images)
+        elements = self._parse_elements(
+            lines, file_path, sections, line_offset=frontmatter_lines
+        )
+
+        # Title priority: frontmatter > first H1 > empty
+        title = frontmatter.get("title", heading_title)
+
+        return MarkdownDocument(
+            file_path=file_path,
+            title=title,
+            frontmatter=frontmatter,
+            sections=sections,
+            elements=elements,
+        )
+
+    def parse_folder(self, folder_path: Path) -> FolderDocument:
+        """Parse a folder with Markdown files.
+
+        Args:
+            folder_path: Path to the folder
+
+        Returns:
+            FolderDocument with all parsed files
+
+        Raises:
+            FileNotFoundError: If the folder path does not exist
+            NotADirectoryError: If the path is not a directory
+        """
+        if not folder_path.exists():
+            raise FileNotFoundError(f"Folder not found: {folder_path}")
+
+        if not folder_path.is_dir():
+            raise NotADirectoryError(f"Path is not a directory: {folder_path}")
+        documents: list[MarkdownDocument] = []
+
+        # Collect all markdown files recursively
+        md_files = self._collect_markdown_files(folder_path)
+
+        # Sort files according to spec rules
+        sorted_files = self._sort_files(md_files, folder_path)
+
+        # Parse each file
+        for file_path in sorted_files:
+            try:
+                doc = self.parse_file(file_path)
+                documents.append(doc)
+            except Exception as e:
+                logger.warning(f"Failed to parse {file_path}: {e}")
+
+        return FolderDocument(
+            root_path=folder_path,
+            documents=documents,
+            structure=[],  # Not yet implemented - see class docstring
+        )
+
+    def get_section(
+        self, doc: MarkdownDocument, path: str
+    ) -> Section | None:
+        """Find a section by its hierarchical path.
+
+        Args:
+            doc: The document to search
+            path: Hierarchical path (e.g., "/chapter/section")
+
+        Returns:
+            Section if found, None otherwise
+        """
+        return self._find_section_by_path(doc.sections, path)
+
+    def get_elements(
+        self, doc: MarkdownDocument, element_type: str | None = None
+    ) -> list[Element]:
+        """Get elements from document, optionally filtered by type.
+
+        Args:
+            doc: The document to search
+            element_type: Optional type filter (code, table, image)
+
+        Returns:
+            List of matching elements
+        """
+        if element_type is None:
+            return doc.elements
+        return [e for e in doc.elements if e.type == element_type]
+
+    def _parse_frontmatter(self, content: str) -> tuple[dict[str, Any], str]:
+        """Parse YAML frontmatter from content.
+
+        Args:
+            content: Full file content
+
+        Returns:
+            Tuple of (frontmatter dict, content without frontmatter)
+        """
+        # Check if content starts with frontmatter delimiter
+        if not content.startswith("---"):
+            return {}, content
+
+        match = FRONTMATTER_PATTERN.match(content)
+        if not match:
+            return {}, content
+
+        yaml_content = match.group(1)
+        try:
+            frontmatter = yaml.safe_load(yaml_content)
+            if frontmatter is None:
+                frontmatter = {}
+        except yaml.YAMLError as e:
+            logger.warning(f"Invalid YAML frontmatter: {e}")
+            frontmatter = {}
+
+        # Remove frontmatter from content
+        content_without_frontmatter = content[match.end():]
+        return frontmatter, content_without_frontmatter
+
+    def _parse_sections(
+        self, lines: list[str], file_path: Path, line_offset: int = 0
+    ) -> tuple[list[Section], str]:
+        """Parse headings into hierarchical sections.
+
+        Args:
+            lines: Document lines
+            file_path: Source file path
+            line_offset: Line offset from frontmatter
+
+        Returns:
+            Tuple of (sections list, document title)
+        """
+        sections: list[Section] = []
+        section_stack: list[Section] = []
+        document_title = ""
+
+        for line_num, line in enumerate(lines, start=1 + line_offset):
+            match = HEADING_PATTERN.match(line)
+            if not match:
+                continue
+
+            level = len(match.group(1))
+            title = match.group(2).strip()
+
+            # First H1 becomes document title
+            if level == 1 and not document_title:
+                document_title = title
+
+            # Build hierarchical path
+            path = self._build_path(section_stack, title, level)
+
+            section = Section(
+                title=title,
+                level=level,
+                path=path,
+                source_location=SourceLocation(file=file_path, line=line_num),
+                children=[],
+            )
+
+            # Find parent section based on level
+            while section_stack and section_stack[-1].level >= level:
+                section_stack.pop()
+
+            if section_stack:
+                section_stack[-1].children.append(section)
+            else:
+                sections.append(section)
+
+            section_stack.append(section)
+
+        return sections, document_title
+
+    def _parse_elements(
+        self,
+        lines: list[str],
+        file_path: Path,
+        sections: list[Section],
+        line_offset: int = 0,
+    ) -> list[Element]:
+        """Parse extractable elements from document.
+
+        Args:
+            lines: Document lines
+            file_path: Source file path
+            sections: Parsed sections for parent context
+            line_offset: Line offset from frontmatter
+
+        Returns:
+            List of extracted elements
+        """
+        elements: list[Element] = []
+        current_section_path = ""
+        in_code_block = False
+        code_fence_char = ""
+        code_fence_count = 0
+        code_block_start_line = 0
+        code_block_language: str | None = None
+
+        # Track table state
+        in_table = False
+        table_start_line = 0
+        table_columns = 0
+        table_rows = 0
+        has_separator = False
+
+        for line_num, line in enumerate(lines, start=1 + line_offset):
+            # Track current section
+            heading_match = HEADING_PATTERN.match(line)
+            if heading_match and not in_code_block:
+                # If we were in a table, finalize it before starting a new heading.
+                if in_table:
+                    if has_separator:
+                        elements.append(
+                            Element(
+                                type="table",
+                                source_location=SourceLocation(
+                                    file=file_path, line=table_start_line
+                                ),
+                                attributes={
+                                    "columns": table_columns,
+                                    "rows": table_rows,
+                                },
+                                parent_section=current_section_path,
+                            )
+                        )
+                    # Reset table state regardless of whether it was valid
+                    in_table = False
+                    table_columns = 0
+                    table_rows = 0
+                    has_separator = False
+                title = heading_match.group(2).strip()
+                current_section_path = self._find_section_path(sections, title)
+                continue
+
+            # Handle code blocks
+            fence_match = CODE_FENCE_PATTERN.match(line)
+            if fence_match:
+                fence_char = fence_match.group(1)[0]
+                fence_count = len(fence_match.group(1))
+
+                if not in_code_block:
+                    # Opening fence
+                    in_code_block = True
+                    code_fence_char = fence_char
+                    code_fence_count = fence_count
+                    code_block_start_line = line_num
+                    code_block_language = fence_match.group(2) or None
+                elif fence_char == code_fence_char and fence_count >= code_fence_count:
+                    # Closing fence
+                    elements.append(
+                        Element(
+                            type="code",
+                            source_location=SourceLocation(
+                                file=file_path, line=code_block_start_line
+                            ),
+                            attributes={"language": code_block_language},
+                            parent_section=current_section_path,
+                        )
+                    )
+                    in_code_block = False
+                continue
+
+            # Skip content inside code blocks
+            if in_code_block:
+                continue
+
+            # Handle tables
+            table_row_match = TABLE_ROW_PATTERN.match(line)
+            if table_row_match:
+                if not in_table:
+                    # Start of table
+                    in_table = True
+                    table_start_line = line_num
+                    # Count columns from header row
+                    cells = table_row_match.group(1).split("|")
+                    table_columns = len(cells)
+                    table_rows = 0
+                    has_separator = False
+                elif TABLE_SEPARATOR_PATTERN.match(line):
+                    has_separator = True
+                elif has_separator:
+                    # Data row after separator
+                    table_rows += 1
+                continue
+            elif in_table:
+                # End of table (non-table line)
+                if has_separator:
+                    elements.append(
+                        Element(
+                            type="table",
+                            source_location=SourceLocation(
+                                file=file_path, line=table_start_line
+                            ),
+                            attributes={
+                                "columns": table_columns,
+                                "rows": table_rows,
+                            },
+                            parent_section=current_section_path,
+                        )
+                    )
+                in_table = False
+
+            # Handle images
+            image_match = IMAGE_PATTERN.search(line)
+            if image_match:
+                image_attributes = {
+                    "alt": image_match.group(1),
+                    "src": image_match.group(2),
+                }
+                title = image_match.group(3)
+                if title is not None:
+                    image_attributes["title"] = title
+
+                elements.append(
+                    Element(
+                        type="image",
+                        source_location=SourceLocation(file=file_path, line=line_num),
+                        attributes=image_attributes,
+                        parent_section=current_section_path,
+                    )
+                )
+
+        # Handle unclosed code block at end of file
+        if in_code_block:
+            logger.warning(
+                f"Unclosed code block at end of file {file_path} "
+                f"(started at line {code_block_start_line}). "
+                f"Code block will be ignored."
+            )
+
+        # Handle table at end of file
+        if in_table and has_separator:
+            elements.append(
+                Element(
+                    type="table",
+                    source_location=SourceLocation(
+                        file=file_path, line=table_start_line
+                    ),
+                    attributes={
+                        "columns": table_columns,
+                        "rows": table_rows,
+                    },
+                    parent_section=current_section_path,
+                )
+            )
+
+        return elements
+
+    def _collect_markdown_files(self, folder_path: Path) -> list[Path]:
+        """Collect all Markdown files in folder recursively.
+
+        Args:
+            folder_path: Root folder path
+
+        Returns:
+            List of Markdown file paths
+        """
+        md_files: list[Path] = []
+
+        for item in folder_path.iterdir():
+            if item.is_file() and item.suffix.lower() == ".md":
+                md_files.append(item)
+            elif item.is_dir() and not item.name.startswith("."):
+                md_files.extend(self._collect_markdown_files(item))
+
+        return md_files
+
+    def _sort_files(self, files: list[Path], root: Path) -> list[Path]:
+        """Sort files according to spec rules.
+
+        Sorting rules:
+        1. index.md / README.md come first in their directory
+        2. Numeric prefixes are sorted numerically (1, 2, 10 not 1, 10, 2)
+        3. Files without numeric prefixes come after those with prefixes
+        4. Directories are processed in order, with their contents inline
+
+        Args:
+            files: List of file paths
+            root: Root folder for relative path calculation
+
+        Returns:
+            Sorted list of file paths
+        """
+
+        def sort_key(path: Path) -> tuple:
+            """Generate sort key for a file path."""
+            rel_path = path.relative_to(root)
+            parts = rel_path.parts
+
+            # Build sort key from path components
+            key_parts: list[tuple[int, int, str]] = []
+            for i, part in enumerate(parts):
+                is_last = i == len(parts) - 1
+
+                if is_last:
+                    # File name - check for special names
+                    name_lower = part.lower()
+                    if name_lower in ("index.md", "readme.md"):
+                        # Special files come first (priority 0)
+                        key_parts.append((0, 0, ""))
+                    else:
+                        # Extract numeric prefix if present
+                        num, rest = self._extract_numeric_prefix(part)
+                        if num is not None:
+                            # Numeric prefix (priority 1)
+                            key_parts.append((1, num, rest))
+                        else:
+                            # No numeric prefix (priority 2)
+                            key_parts.append((2, 0, part.lower()))
+                else:
+                    # Directory name
+                    num, rest = self._extract_numeric_prefix(part)
+                    if num is not None:
+                        key_parts.append((1, num, rest))
+                    else:
+                        key_parts.append((2, 0, part.lower()))
+
+            return tuple(key_parts)
+
+        return sorted(files, key=sort_key)
+
+    def _extract_numeric_prefix(self, name: str) -> tuple[int | None, str]:
+        """Extract numeric prefix from filename.
+
+        Args:
+            name: Filename (e.g., "01_intro.md")
+
+        Returns:
+            Tuple of (number or None, rest of name)
+        """
+        match = re.match(r"^(\d+)[_-](.+)$", name)
+        if match:
+            return int(match.group(1)), match.group(2)
+        return None, name
+
+    def _find_section_path(self, sections: list[Section], title: str) -> str:
+        """Find section path by title.
+
+        Args:
+            sections: Sections to search
+            title: Title to find
+
+        Returns:
+            Section path or empty string
+        """
+        for section in sections:
+            if section.title == title:
+                return section.path
+            found = self._find_section_path(section.children, title)
+            if found:
+                return found
+        return ""
+
+    def _build_path(
+        self, section_stack: list[Section], title: str, level: int
+    ) -> str:
+        """Build hierarchical path for a section.
+
+        Args:
+            section_stack: Current section stack
+            title: Section title
+            level: Heading level
+
+        Returns:
+            Hierarchical path string
+        """
+        slug = slugify(title)
+
+        # Find ancestors at lower levels
+        ancestors = []
+        for s in section_stack:
+            if s.level < level:
+                ancestors.append(s)
+
+        if ancestors:
+            parent_path = ancestors[-1].path
+            return f"{parent_path}/{slug}"
+        else:
+            return f"/{slug}"
+
+    def _find_section_by_path(
+        self, sections: list[Section], path: str
+    ) -> Section | None:
+        """Recursively find a section by path.
+
+        Args:
+            sections: Sections to search
+            path: Path to find
+
+        Returns:
+            Section if found, None otherwise
+        """
+        for section in sections:
+            if section.path == path:
+                return section
+            found = self._find_section_by_path(section.children, path)
+            if found:
+                return found
+        return None

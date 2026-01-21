@@ -13,6 +13,7 @@ from pathlib import Path
 from mcp_server.models import (
     CrossReference,
     Document,
+    Element,
     Section,
     SourceLocation,
 )
@@ -21,6 +22,13 @@ from mcp_server.models import (
 SECTION_PATTERN = re.compile(r"^(={1,6})\s+(.+?)(?:\s+=*)?$")
 ATTRIBUTE_PATTERN = re.compile(r"^:([a-zA-Z0-9_-]+):\s*(.*)$")
 INCLUDE_PATTERN = re.compile(r"^include::(.+?)\[(.*)\]$")
+
+# Element patterns
+CODE_BLOCK_START_PATTERN = re.compile(r"^\[source(?:,([a-zA-Z0-9_+-]+))?\]$")
+LISTING_DELIMITER_PATTERN = re.compile(r"^-{4,}$")
+TABLE_DELIMITER_PATTERN = re.compile(r"^\|===$")
+IMAGE_PATTERN = re.compile(r"^image::(.+?)\[(.*)?\]$")
+ADMONITION_PATTERN = re.compile(r"^(NOTE|TIP|IMPORTANT|WARNING|CAUTION):\s*(.*)$")
 
 
 def _title_to_slug(title: str) -> str:
@@ -126,11 +134,14 @@ class AsciidocParser:
             expanded_lines, file_path, attributes
         )
 
+        # Parse elements with section context
+        elements = self._parse_elements(expanded_lines, sections)
+
         return AsciidocDocument(
             file_path=file_path,
             title=title,
             sections=sections,
-            elements=[],
+            elements=elements,
             attributes=attributes,
             cross_references=[],
             includes=includes,
@@ -315,3 +326,145 @@ class AsciidocParser:
                     section_stack.append(section)
 
         return sections, document_title
+
+    def _parse_elements(
+        self,
+        lines: list[tuple[str, Path, int, SourceLocation | None]],
+        sections: list[Section],
+    ) -> list[Element]:
+        """Parse elements from document lines.
+
+        Args:
+            lines: Expanded lines with source info
+            sections: Parsed sections for parent context
+
+        Returns:
+            List of extracted elements
+        """
+        elements: list[Element] = []
+        current_section_path = ""
+        pending_code_language: str | None = None
+        in_code_block = False
+        in_table = False
+
+        for line_text, source_file, line_num, resolved_from in lines:
+            # Track current section for parent_section
+            section_match = SECTION_PATTERN.match(line_text)
+            if section_match:
+                title = section_match.group(2).strip()
+                current_section_path = self._find_section_path(sections, title)
+                continue
+
+            # Detect code block attribute [source,language]
+            code_attr_match = CODE_BLOCK_START_PATTERN.match(line_text)
+            if code_attr_match:
+                pending_code_language = code_attr_match.group(1)
+                continue
+
+            # Detect listing delimiter ----
+            if LISTING_DELIMITER_PATTERN.match(line_text):
+                if not in_code_block and pending_code_language is not None:
+                    # Start of code block
+                    in_code_block = True
+                    source_location = SourceLocation(
+                        file=source_file,
+                        line=line_num,
+                        resolved_from=resolved_from,
+                    )
+                    elements.append(
+                        Element(
+                            type="code",
+                            source_location=source_location,
+                            attributes={"language": pending_code_language},
+                            parent_section=current_section_path,
+                        )
+                    )
+                    pending_code_language = None
+                elif in_code_block:
+                    # End of code block
+                    in_code_block = False
+                continue
+
+            # Detect table delimiter |===
+            if TABLE_DELIMITER_PATTERN.match(line_text):
+                if not in_table:
+                    # Start of table
+                    in_table = True
+                    source_location = SourceLocation(
+                        file=source_file,
+                        line=line_num,
+                        resolved_from=resolved_from,
+                    )
+                    elements.append(
+                        Element(
+                            type="table",
+                            source_location=source_location,
+                            attributes={},
+                            parent_section=current_section_path,
+                        )
+                    )
+                else:
+                    # End of table
+                    in_table = False
+                continue
+
+            # Detect image macro
+            image_match = IMAGE_PATTERN.match(line_text)
+            if image_match:
+                target = image_match.group(1)
+                alt_text = image_match.group(2) or ""
+                source_location = SourceLocation(
+                    file=source_file,
+                    line=line_num,
+                    resolved_from=resolved_from,
+                )
+                elements.append(
+                    Element(
+                        type="image",
+                        source_location=source_location,
+                        attributes={"target": target, "alt": alt_text},
+                        parent_section=current_section_path,
+                    )
+                )
+                continue
+
+            # Detect admonition
+            admonition_match = ADMONITION_PATTERN.match(line_text)
+            if admonition_match:
+                admonition_type = admonition_match.group(1)
+                content = admonition_match.group(2)
+                source_location = SourceLocation(
+                    file=source_file,
+                    line=line_num,
+                    resolved_from=resolved_from,
+                )
+                elements.append(
+                    Element(
+                        type="admonition",
+                        source_location=source_location,
+                        attributes={"admonition_type": admonition_type, "content": content},
+                        parent_section=current_section_path,
+                    )
+                )
+                continue
+
+        return elements
+
+    def _find_section_path(self, sections: list[Section], title: str) -> str:
+        """Find the path of a section by its title.
+
+        Args:
+            sections: List of sections to search
+            title: Title to find
+
+        Returns:
+            Section path or empty string if not found
+        """
+        for section in sections:
+            if section.title == title:
+                return section.path
+            # Search in children
+            result = self._find_section_path(section.children, title)
+            if result:
+                return result
+        return ""

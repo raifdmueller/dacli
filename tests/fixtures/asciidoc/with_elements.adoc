@@ -1,0 +1,30 @@
+= Dokument mit Elementen
+
+== Code-Beispiele
+
+Hier ist ein Python-Beispiel:
+
+[source,python]
+----
+def hello():
+    print("Hello, World!")
+----
+
+== Tabellen
+
+|===
+| Spalte 1 | Spalte 2
+
+| Wert A
+| Wert B
+|===
+
+== Bilder
+
+image::diagram.png[Ein Diagramm]
+
+== Hinweise
+
+NOTE: Dies ist ein wichtiger Hinweis.
+
+WARNING: Dies ist eine Warnung.

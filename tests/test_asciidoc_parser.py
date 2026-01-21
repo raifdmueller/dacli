@@ -271,6 +271,72 @@ class TestIncludeDirectives:
         )
 
 
+class TestElementExtraction:
+    """Tests for element extraction (AC-ADOC-05, AC-ADOC-06, AC-ADOC-07)."""
+
+    def test_code_block_is_extracted(self):
+        """Test that code blocks are extracted as elements."""
+        from mcp_server.asciidoc_parser import AsciidocParser
+
+        parser = AsciidocParser(base_path=FIXTURES_DIR)
+        doc = parser.parse_file(FIXTURES_DIR / "with_elements.adoc")
+
+        code_elements = [e for e in doc.elements if e.type == "code"]
+        assert len(code_elements) == 1
+        assert code_elements[0].attributes.get("language") == "python"
+
+    def test_code_block_source_location(self):
+        """Test that code block has correct source location."""
+        from mcp_server.asciidoc_parser import AsciidocParser
+
+        parser = AsciidocParser(base_path=FIXTURES_DIR)
+        doc = parser.parse_file(FIXTURES_DIR / "with_elements.adoc")
+
+        code_elements = [e for e in doc.elements if e.type == "code"]
+        assert code_elements[0].source_location.line == 8  # Line of ----
+
+    def test_code_block_parent_section(self):
+        """Test that code block has correct parent section."""
+        from mcp_server.asciidoc_parser import AsciidocParser
+
+        parser = AsciidocParser(base_path=FIXTURES_DIR)
+        doc = parser.parse_file(FIXTURES_DIR / "with_elements.adoc")
+
+        code_elements = [e for e in doc.elements if e.type == "code"]
+        assert "code-beispiele" in code_elements[0].parent_section
+
+    def test_table_is_extracted(self):
+        """Test that tables are extracted as elements."""
+        from mcp_server.asciidoc_parser import AsciidocParser
+
+        parser = AsciidocParser(base_path=FIXTURES_DIR)
+        doc = parser.parse_file(FIXTURES_DIR / "with_elements.adoc")
+
+        table_elements = [e for e in doc.elements if e.type == "table"]
+        assert len(table_elements) == 1
+
+    def test_image_is_extracted(self):
+        """Test that images are extracted as elements."""
+        from mcp_server.asciidoc_parser import AsciidocParser
+
+        parser = AsciidocParser(base_path=FIXTURES_DIR)
+        doc = parser.parse_file(FIXTURES_DIR / "with_elements.adoc")
+
+        image_elements = [e for e in doc.elements if e.type == "image"]
+        assert len(image_elements) == 1
+        assert image_elements[0].attributes.get("target") == "diagram.png"
+
+    def test_admonition_is_extracted(self):
+        """Test that admonitions are extracted as elements."""
+        from mcp_server.asciidoc_parser import AsciidocParser
+
+        parser = AsciidocParser(base_path=FIXTURES_DIR)
+        doc = parser.parse_file(FIXTURES_DIR / "with_elements.adoc")
+
+        admonition_elements = [e for e in doc.elements if e.type == "admonition"]
+        assert len(admonition_elements) == 2  # NOTE and WARNING
+
+
 class TestEdgeCases:
     """Tests for edge cases."""
 

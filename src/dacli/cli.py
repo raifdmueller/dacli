@@ -262,10 +262,11 @@ pass_context = click.make_pass_decorator(CliContext)
 @click.group(
     cls=AliasedGroup,
     epilog="""
+\b
 Examples:
-  dacli --format json structure          # Get document structure as JSON
-  dacli search "authentication"          # Find sections about authentication
-  dacli section api.endpoints            # Read a specific section
+  dacli --format json structure      # Get document structure as JSON
+  dacli search "authentication"      # Find sections about authentication
+  dacli section api.endpoints        # Read a specific section
 """,
 )
 @click.option(

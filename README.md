@@ -145,8 +145,8 @@ For detailed tool documentation, see the [User Manual](src/docs/50-user-manual/)
 
 ### Branching Strategy
 
-- **`main`** - Stable, production-ready code
-- **`develop`** - Active development branch
+- **`main`** - Stable, production-ready (default branch for installation)
+- **`develop`** - Active development
 
 ```bash
 # Start development
@@ -155,6 +155,7 @@ git pull
 git checkout -b feature/my-feature
 
 # After implementation, create PR to develop
+# For releases: merge develop to main
 ```
 
 ### Commands

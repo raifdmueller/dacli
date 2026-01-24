@@ -19,7 +19,7 @@ Part of the [docToolchain](https://doctoolchain.org/) ecosystem.
 
 ## Branching Strategy
 
-- **`main`** - Stable, production-ready code. Only merge via PRs.
+- **`main`** - Stable, production-ready code. **Default branch** (used by `uv tool install`).
 - **`develop`** - Active development branch. Create feature branches from here.
 - **Feature branches** - Use format `feature/description-issue-number` or `fix/description-issue-number`
 
@@ -28,7 +28,9 @@ Part of the [docToolchain](https://doctoolchain.org/) ecosystem.
 2. Implement changes with tests
 3. Create PR to `develop`
 4. After review/CI, merge to `develop`
-5. Periodically merge `develop` to `main` for releases
+5. For releases: merge `develop` to `main` and tag new version
+
+**Important:** Keep `main` as default branch so users get stable versions when installing.
 
 ## Conventions
 

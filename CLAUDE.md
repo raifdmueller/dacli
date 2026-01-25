@@ -17,6 +17,35 @@ Part of the [docToolchain](https://doctoolchain.org/) ecosystem.
 - **MCP Framework:** FastMCP (https://github.com/jlowin/fastmcp)
 - **MCP SDK:** mcp[cli]
 
+## Fork-Based Development Workflow
+
+Development happens on a fork to keep `upstream/main` stable for `uv tool install`.
+
+**Git Remotes:**
+- `origin` → `raifdmueller/dacli` (fork for development)
+- `upstream` → `docToolchain/dacli` (stable, production-ready)
+
+**Branches:**
+- `upstream/main` - Stable, production-ready. **Default branch** (used by `uv tool install`).
+- Feature branches on fork - Use format `feature/description-issue-number` or `fix/description-issue-number`
+
+**Workflow:**
+1. Sync fork: `git fetch upstream`
+2. Create feature branch: `git checkout -b feature/xyz upstream/main`
+3. Implement changes with tests
+4. Push to fork: `git push origin feature/xyz`
+5. Create PR from fork to `upstream/main` (use `Fixes #123` in PR body)
+6. CI runs on PR, review, then merge
+7. Issues auto-close when merged to main
+
+**Git User for AI commits:**
+- Name: `R{AI}f D. Müller`
+- Email: `ralf.d.mueller+AI@gmail.com`
+
+**Authentication:**
+- GitHub CLI (`gh`) configured with `gh auth setup-git`
+- Remotes use HTTPS (not SSH) for gh credential helper
+
 ## Conventions
 
 - Documentation, Issues, Pull-Requests etc. is always written in english

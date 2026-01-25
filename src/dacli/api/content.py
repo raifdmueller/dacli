@@ -118,6 +118,10 @@ def get_elements(
         default=None,
         description="Optional section path to filter elements",
     ),
+    recursive: bool = Query(
+        default=False,
+        description="Include elements from child sections (requires path)",
+    ),
 ) -> ElementsResponse:
     """Get elements filtered by type and optionally by section path."""
     # Validate element type
@@ -146,6 +150,7 @@ def get_elements(
         elements = index.get_elements(
             element_type=internal_type,
             section_path=path,
+            recursive=recursive,
         )
         all_elements.extend(elements)
 
@@ -171,11 +176,7 @@ def get_elements(
                 location=ElementLocation(
                     file=str(elem.source_location.file),
                     start_line=elem.source_location.line,
-                    # Note: SourceLocation currently exposes only a single line field.
-                    # Until an explicit end_line is available, we intentionally set
-                    # end_line to the same value as start_line.
-                    # TODO: Update this when SourceLocation includes an end_line range.
-                    end_line=elem.source_location.line,
+                    end_line=elem.source_location.end_line or elem.source_location.line,
                 ),
             )
         )

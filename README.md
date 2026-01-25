@@ -143,6 +143,23 @@ For detailed tool documentation, see the [User Manual](src/docs/50-user-manual/)
 
 ## Development
 
+### Branching Strategy
+
+- **`main`** - Stable, production-ready (default branch for installation)
+- **`develop`** - Active development
+
+```bash
+# Start development
+git checkout develop
+git pull
+git checkout -b feature/my-feature
+
+# After implementation, create PR to develop
+# For releases: merge develop to main
+```
+
+### Commands
+
 ```bash
 # Install with dev dependencies
 uv sync --all-extras

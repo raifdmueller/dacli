@@ -17,6 +17,12 @@ from dacli.models import (
     ParseWarning,
     Section,
     SourceLocation,
+    WarningType,
+)
+from dacli.parser_utils import (
+    collect_all_sections,
+    find_section_by_path,
+    slugify,
 )
 
 # Regex patterns from specification
@@ -65,21 +71,6 @@ class CircularIncludeError(Exception):
         chain_str = " -> ".join(str(p.name) for p in include_chain)
         super().__init__(f"Circular include detected: {chain_str} -> {file_path.name}")
 
-
-def _title_to_slug(title: str) -> str:
-    """Convert a section title to a URL-friendly slug.
-
-    Args:
-        title: The section title
-
-    Returns:
-        A lowercase slug with spaces replaced by dashes
-    """
-    # Remove special characters, convert to lowercase, replace spaces with dashes
-    slug = title.lower()
-    slug = re.sub(r"[^\w\s-]", "", slug)
-    slug = re.sub(r"\s+", "-", slug)
-    return slug
 
 
 @dataclass
@@ -169,28 +160,7 @@ class AsciidocStructureParser:
         Returns:
             The section if found, None otherwise
         """
-        return self._find_section_by_path(doc.sections, path)
-
-    def _find_section_by_path(
-        self, sections: list[Section], path: str
-    ) -> Section | None:
-        """Recursively find a section by path.
-
-        Args:
-            sections: List of sections to search
-            path: Section path to find
-
-        Returns:
-            The section if found, None otherwise
-        """
-        for section in sections:
-            if section.path == path:
-                return section
-            # Search in children
-            result = self._find_section_by_path(section.children, path)
-            if result:
-                return result
-        return None
+        return find_section_by_path(doc.sections, path)
 
     def get_elements(
         self, doc: AsciidocDocument, element_type: str | None = None
@@ -491,7 +461,7 @@ class AsciidocStructureParser:
                     while section_stack and section_stack[-1].level >= level:
                         section_stack.pop()
 
-                    slug = _title_to_slug(title)
+                    slug = slugify(title)
                     if section_stack:
                         parent = section_stack[-1]
                         # Issue #130, ADR-008: Build section path with file prefix
@@ -537,7 +507,7 @@ class AsciidocStructureParser:
         """
         # Collect all sections with their file paths and start lines
         all_sections: list[Section] = []
-        self._collect_all_sections(sections, all_sections)
+        collect_all_sections(sections, all_sections)
 
         if not all_sections:
             return
@@ -575,19 +545,6 @@ class AsciidocStructureParser:
                 else:
                     # Last section in file, ends at file end
                     section.source_location.end_line = max_line
-
-    def _collect_all_sections(
-        self, sections: list[Section], result: list[Section]
-    ) -> None:
-        """Recursively collect all sections into a flat list.
-
-        Args:
-            sections: List of sections to process
-            result: List to append sections to (modified in place)
-        """
-        for section in sections:
-            result.append(section)
-            self._collect_all_sections(section.children, result)
 
     def _create_diagram_element(
         self,
@@ -668,6 +625,7 @@ class AsciidocStructureParser:
         source_location = SourceLocation(
             file=source_file,
             line=line_num,
+            end_line=line_num,  # Initialize end_line to start (Issue #136)
             resolved_from=resolved_from,
         )
         return Element(
@@ -706,6 +664,7 @@ class AsciidocStructureParser:
         in_ditaa_block = False
         in_table = False
         current_list_type: str | None = None  # Track if we're in a list
+        current_list_element: Element | None = None  # Track list for end_line (#136)
         # Track ALL open blocks for end_line (Issue #157: use stack instead of single element)
         open_blocks: list[Element] = []
 
@@ -902,10 +861,14 @@ class AsciidocStructureParser:
                 if current_list_type != "unordered":
                     # Start of a new unordered list
                     current_list_type = "unordered"
-                    elements.append(self._create_list_element(
+                    current_list_element = self._create_list_element(
                         "unordered", source_file, line_num,
                         resolved_from, current_section_path,
-                    ))
+                    )
+                    elements.append(current_list_element)
+                elif current_list_element is not None:
+                    # Continue list - update end_line (Issue #136)
+                    current_list_element.source_location.end_line = line_num
                 continue
 
             # Check for ordered list (. item)
@@ -913,10 +876,14 @@ class AsciidocStructureParser:
                 if current_list_type != "ordered":
                     # Start of a new ordered list
                     current_list_type = "ordered"
-                    elements.append(self._create_list_element(
+                    current_list_element = self._create_list_element(
                         "ordered", source_file, line_num,
                         resolved_from, current_section_path,
-                    ))
+                    )
+                    elements.append(current_list_element)
+                elif current_list_element is not None:
+                    # Continue list - update end_line (Issue #136)
+                    current_list_element.source_location.end_line = line_num
                 continue
 
             # Check for description list (term:: definition)
@@ -924,15 +891,20 @@ class AsciidocStructureParser:
                 if current_list_type != "description":
                     # Start of a new description list
                     current_list_type = "description"
-                    elements.append(self._create_list_element(
+                    current_list_element = self._create_list_element(
                         "description", source_file, line_num,
                         resolved_from, current_section_path,
-                    ))
+                    )
+                    elements.append(current_list_element)
+                elif current_list_element is not None:
+                    # Continue list - update end_line (Issue #136)
+                    current_list_element.source_location.end_line = line_num
                 continue
 
             # If line is not a list item, reset list tracking
             if line_text.strip():
                 current_list_type = None
+                current_list_element = None
 
         # Handle ALL unclosed blocks - set end_line to last line of their source file
         # Issue #146: unclosed code blocks should have proper end_line
@@ -948,12 +920,12 @@ class AsciidocStructureParser:
             block_type = unclosed_block.type
             block_line = unclosed_block.source_location.line
             if block_type == "table":
-                warning_type = "unclosed_table"
+                warning_type = WarningType.UNCLOSED_TABLE
                 warning_msg = (
                     f"Table starting at line {block_line} is not properly closed"
                 )
             else:
-                warning_type = "unclosed_block"
+                warning_type = WarningType.UNCLOSED_BLOCK
                 warning_msg = (
                     f"{block_type.capitalize()} block starting at line {block_line} "
                     "is not properly closed"

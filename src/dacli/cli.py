@@ -467,7 +467,7 @@ def section(ctx: CliContext, path: str):
         sys.exit(EXIT_ERROR)
 
 
-@cli.command("sections-at-level", epilog="""
+@cli.command("sections-at-level", context_settings={"ignore_unknown_options": True, "allow_interspersed_args": False}, epilog="""
 Examples:
   dacli sections-at-level 1        # All top-level chapters
   dacli sections-at-level 2        # All second-level sections
@@ -476,7 +476,18 @@ Examples:
 @click.argument("level", type=int)
 @pass_context
 def sections_at_level(ctx: CliContext, level: int):
-    """Get all sections at a specific nesting level."""
+    """Get all sections at a specific nesting level.
+
+    LEVEL must be a non-negative integer (0, 1, 2, ...).
+    """
+    # Validate level is non-negative (Issue #199)
+    if level < 0:
+        raise click.BadParameter(
+            f"Level must be non-negative, got {level}. "
+            "Document hierarchies start at level 0 (document root).",
+            param_hint="level"
+        )
+
     sections = ctx.index.get_sections_at_level(level)
     result = {
         "level": level,

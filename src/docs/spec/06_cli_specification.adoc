@@ -177,6 +177,29 @@ Shows all sections at a specific level.
 dacli sections-at-level <LEVEL>
 ----
 
+**Arguments:**
+
+* `LEVEL`: Non-negative integer (0, 1, 2, ...) representing the nesting level
+  - Level 0: Document root
+  - Level 1: Top-level chapters/sections
+  - Level 2: Subsections
+  - Level 3 and higher: Deeper nested sections
+
+**Examples:**
+[source,bash]
+----
+# Get all top-level chapters (Level 1)
+$ dacli sections-at-level 1
+
+# Get all second-level sections (Level 2)
+$ dacli sections-at-level 2
+
+# Error: Negative levels are not valid (Issue #199)
+$ dacli sections-at-level -1
+Error: Invalid value for 'level': Level must be non-negative, got -1.
+Document hierarchies start at level 0 (document root).
+----
+
 == Search & Elements Commands
 
 === search

@@ -20,7 +20,6 @@ from dacli.mcp_app import create_mcp_server
 from dacli.services.validation_service import validate_structure
 from dacli.structure_index import StructureIndex
 
-
 # ── Fixtures ──────────────────────────────────────────────────────────────
 
 

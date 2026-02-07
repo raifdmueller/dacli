@@ -12,11 +12,10 @@ from pathlib import Path
 
 import pytest
 
+from dacli.file_handler import FileSystemHandler
 from dacli.mcp_app import create_mcp_server
 from dacli.services.content_service import update_section as service_update_section
-from dacli.file_handler import FileSystemHandler
 from dacli.structure_index import StructureIndex
-
 
 # ============================================================================
 # Bug #245: update_section preserve_title=False heading level validation

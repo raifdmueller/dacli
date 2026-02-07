@@ -67,6 +67,7 @@ class StructureIndex:
         self._section_content: dict[str, str] = {}  # Content for full-text search
         self._documents: list[Document] = []
         self._top_level_sections: list[Section] = []
+        self._circular_include_errors: list[dict] = []
         self._index_ready: bool = False
 
     def build_from_documents(self, documents: list[Document]) -> list[str]:
@@ -491,6 +492,7 @@ class StructureIndex:
         self._section_content.clear()
         self._documents.clear()
         self._top_level_sections.clear()
+        self._circular_include_errors.clear()
         self._index_ready = False
 
     def stats(self) -> dict:

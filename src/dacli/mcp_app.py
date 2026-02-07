@@ -20,7 +20,7 @@ from pathlib import Path
 from fastmcp import FastMCP
 
 from dacli import __version__
-from dacli.asciidoc_parser import AsciidocStructureParser
+from dacli.asciidoc_parser import AsciidocStructureParser, CircularIncludeError
 from dacli.file_handler import FileReadError, FileSystemHandler, FileWriteError
 from dacli.file_utils import find_doc_files
 from dacli.markdown_parser import MarkdownStructureParser
@@ -658,6 +658,51 @@ def _build_index(
     # Filter: only parse files that are NOT included by others (Issue #184)
     root_adoc_files = [f for f in all_adoc_files if f not in included_files]
 
+    # Issue #251: Detect circular includes in the include graph
+    # Files that include each other circularly all end up in included_files
+    # with none of them becoming root documents. Detect these cycles.
+    circular_include_errors: list[dict] = []
+    if all_adoc_files:
+        include_graph: dict[Path, set[Path]] = {}
+        for adoc_file in all_adoc_files:
+            resolved = adoc_file.resolve()
+            includes = AsciidocStructureParser.scan_includes(adoc_file)
+            include_graph[resolved] = includes
+
+        circular_files: set[Path] = set()
+        visited: set[Path] = set()
+        in_stack: set[Path] = set()
+
+        def _find_cycles(node: Path, path_list: list[Path]) -> None:
+            if node in in_stack:
+                cycle_start = path_list.index(node)
+                for f in path_list[cycle_start:]:
+                    circular_files.add(f)
+                return
+            if node in visited:
+                return
+            visited.add(node)
+            in_stack.add(node)
+            path_list.append(node)
+            for neighbor in include_graph.get(node, set()):
+                _find_cycles(neighbor, path_list)
+            path_list.pop()
+            in_stack.remove(node)
+
+        for adoc_file in all_adoc_files:
+            _find_cycles(adoc_file.resolve(), [])
+
+        for circ_file in circular_files:
+            message = (
+                f"Circular include detected: {circ_file.name} "
+                f"is part of an include cycle"
+            )
+            circular_include_errors.append({
+                "file": circ_file,
+                "include_chain": list(circular_files),
+                "message": message,
+            })
+
     logger.info(
         f"Found {len(all_adoc_files)} AsciiDoc files, "
         f"{len(included_files)} included, "
@@ -669,6 +714,14 @@ def _build_index(
         try:
             doc = asciidoc_parser.parse_file(adoc_file)
             documents.append(doc)
+        except CircularIncludeError as e:
+            # Issue #251: Catch circular includes during parsing too
+            logger.warning("Circular include in %s: %s", adoc_file, e)
+            circular_include_errors.append({
+                "file": adoc_file,
+                "include_chain": e.include_chain,
+                "message": str(e),
+            })
         except Exception as e:
             # Log but continue with other files
             logger.warning("Failed to parse %s: %s", adoc_file, e)
@@ -694,5 +747,8 @@ def _build_index(
     warnings = index.build_from_documents(documents)
     for warning in warnings:
         logger.warning("Index: %s", warning)
+
+    # Issue #251: Store circular include errors on the index for validation
+    index._circular_include_errors = circular_include_errors
 
 

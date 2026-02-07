@@ -33,6 +33,25 @@ def validate_structure(index: StructureIndex, docs_root: Path) -> dict:
     errors: list[dict] = []
     warnings: list[dict] = []
 
+    # Issue #251: Report circular include errors explicitly
+    docs_root_resolved = docs_root.resolve()
+    circular_files: set[Path] = set()
+    for circ_error in index._circular_include_errors:
+        file_path = circ_error["file"]
+        try:
+            rel_path = file_path.relative_to(docs_root_resolved)
+        except ValueError:
+            rel_path = file_path
+        errors.append({
+            "type": "circular_include",
+            "path": str(rel_path),
+            "message": circ_error["message"],
+        })
+        # Track all files involved in circular includes
+        circular_files.add(file_path.resolve())
+        for chain_path in circ_error["include_chain"]:
+            circular_files.add(chain_path.resolve())
+
     # Get all indexed files
     indexed_files = set(index._file_to_sections.keys())
 
@@ -44,10 +63,10 @@ def validate_structure(index: StructureIndex, docs_root: Path) -> dict:
         all_doc_files.add(md_file.resolve())
 
     # Check for orphaned files (files not indexed)
+    # Issue #251: Exclude files involved in circular includes from orphaned detection
     indexed_resolved = {f.resolve() for f in indexed_files}
-    docs_root_resolved = docs_root.resolve()
     for doc_file in all_doc_files:
-        if doc_file not in indexed_resolved:
+        if doc_file not in indexed_resolved and doc_file not in circular_files:
             try:
                 rel_path = doc_file.relative_to(docs_root_resolved)
             except ValueError:

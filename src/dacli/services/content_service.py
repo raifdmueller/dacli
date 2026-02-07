@@ -154,26 +154,34 @@ def update_section(
                 ),
             }
 
-        # Issue #217: Reject level change if section has children
-        # Extract heading level from new content
+        # Issue #217 / #245: Reject heading level changes
         first_line = stripped_content.split("\n", 1)[0]
         if stripped_content.startswith("="):
-            # AsciiDoc: count leading "=" characters, level = count - 1
             new_level = len(first_line) - len(first_line.lstrip("="))
             new_level = new_level - 1  # AsciiDoc: "=" = level 0, "==" = level 1
         else:
-            # Markdown: count leading "#" characters
             new_level = len(first_line) - len(first_line.lstrip("#"))
 
-        # Check if section has children and level would change
-        if section.children and new_level != section.level:
+        # Issue #245: Always reject heading level changes to prevent
+        # hierarchy corruption, even for sections without children.
+        if new_level != section.level:
+            if section.children:
+                reason = (
+                    f"because section '{normalized_path}' has "
+                    f"{len(section.children)} child section(s). "
+                    "Remove or relocate child sections first."
+                )
+            else:
+                reason = (
+                    "because it would corrupt the document hierarchy. "
+                    f"Section '{normalized_path}' must remain at "
+                    f"heading level {section.level}."
+                )
             return {
                 "success": False,
                 "error": (
-                    f"Cannot change heading level from {section.level} to {new_level} "
-                    f"because section '{normalized_path}' has {len(section.children)} "
-                    "child section(s). This would break the document hierarchy. "
-                    "Remove or relocate child sections first."
+                    f"Cannot change heading level from {section.level} "
+                    f"to {new_level} {reason}"
                 ),
             }
 

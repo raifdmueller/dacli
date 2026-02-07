@@ -538,9 +538,9 @@ def create_mcp_server(
                     prev_line = lines[after_line - 1] if after_line <= len(lines) else ""
                     if prev_line.strip():
                         insert_content = "\n" + insert_content
-                # Add blank line after content if next line is a heading
+                # Issue #244: Add blank line after content if next line is a heading
                 next_line_idx = after_line
-                if next_line_is_heading(lines, next_line_idx) and not starts_with_heading:
+                if next_line_is_heading(lines, next_line_idx):
                     insert_content = ensure_trailing_blank_line(insert_content)
                 new_lines = lines[:after_line] + [insert_content] + lines[after_line:]
             else:  # append

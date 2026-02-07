@@ -113,10 +113,10 @@ class TestLevelChangeWithChildrenRejected:
         assert "== Renamed Parent" in file_content
         assert "=== Child Section" in file_content  # Child still there
 
-    def test_level_change_without_children_succeeds(
+    def test_level_change_without_children_rejected(
         self, index_and_handler, temp_doc_with_children: Path
     ):
-        """Changing level when section has NO children should succeed."""
+        """Issue #245: Changing level even without children should fail."""
         index, file_handler = index_and_handler
 
         # Change child section (which has no children) to different level
@@ -128,12 +128,8 @@ class TestLevelChangeWithChildrenRejected:
             preserve_title=False,
         )
 
-        assert result["success"] is True
-
-        # Verify the change was made
-        doc_file = temp_doc_with_children / "test.adoc"
-        file_content = doc_file.read_text(encoding="utf-8")
-        assert "==== Now Level 3" in file_content
+        assert result["success"] is False
+        assert "heading level" in result["error"].lower()
 
 
 class TestCLILevelChangeValidation:

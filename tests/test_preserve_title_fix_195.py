@@ -110,10 +110,17 @@ class TestPreserveTitleFalseValidation:
     def test_preserve_title_false_with_markdown_style_heading(
         self, index_and_handler, temp_doc_dir: Path
     ):
-        """preserve_title=False with Markdown-style heading (##) should succeed."""
+        """preserve_title=False with Markdown-style heading at correct level should succeed.
+
+        Issue #245: Heading level must match the original section level.
+        Section 1 is level 1 (==), so Markdown ## (level 2) is rejected.
+        Use a Markdown heading at the correct level instead.
+        """
         index, file_handler = index_and_handler
 
-        # Test that Markdown-style headings are also accepted (# instead of =)
+        # Section 1 is AsciiDoc level 1 (==). In Markdown, level 1 = "#".
+        # But "#" corresponds to AsciiDoc "=" (document title), so we test
+        # that ## at wrong level is rejected per Issue #245.
         result = service_update_section(
             index=index,
             file_handler=file_handler,
@@ -122,10 +129,10 @@ class TestPreserveTitleFalseValidation:
             preserve_title=False,
         )
 
-        assert result["success"] is True
-        doc_file = temp_doc_dir / "test.adoc"
-        file_content = doc_file.read_text(encoding="utf-8")
-        assert "## New Markdown-Style Title" in file_content
+        # Issue #245: ## is Markdown level 2, but section is AsciiDoc level 1
+        # Level mismatch is now correctly rejected
+        assert result["success"] is False
+        assert "heading level" in result["error"].lower()
 
     def test_preserve_title_false_with_only_whitespace_fails(
         self, index_and_handler

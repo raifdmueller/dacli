@@ -155,8 +155,38 @@ COMMAND_GROUPS = {
 COMMAND_TO_ALIAS = {v: k for k, v in COMMAND_ALIASES.items()}
 
 
+# Global options that users commonly misplace after the command (Issue #176)
+GLOBAL_OPTIONS = {
+    "--format", "--pretty", "--verbose", "--docs-root",
+    "--no-gitignore", "--include-hidden",
+}
+
+
+class GlobalOptionHintCommand(click.Command):
+    """A Click command that hints when users misplace global options."""
+
+    def parse_args(self, ctx, args):
+        try:
+            return super().parse_args(ctx, args)
+        except click.UsageError as e:
+            error_msg = str(e)
+            if "No such option:" in error_msg:
+                for opt in GLOBAL_OPTIONS:
+                    if opt in error_msg:
+                        raise click.UsageError(
+                            f"No such option: {opt}\n\n"
+                            f"Hint: --format, --pretty, and --verbose are global options.\n"
+                            f"Place them before the command: "
+                            f"dacli {opt} ... {ctx.info_name} ..."
+                        ) from e
+            raise
+
+
 class AliasedGroup(click.Group):
     """A Click group that supports command aliases, typo suggestions, and grouped help."""
+
+    # Issue #176: Use GlobalOptionHintCommand for all subcommands by default
+    command_class = GlobalOptionHintCommand
 
     def get_command(self, ctx, cmd_name):
         """Resolve command name, checking aliases first."""
@@ -686,6 +716,10 @@ def update(ctx: CliContext, path: str, content: str, no_preserve_title: bool,
         processed_content = sys.stdin.read()
     else:
         processed_content = _process_escape_sequences(content)
+
+    # Issue #250: Warn when content is empty/whitespace-only
+    if not processed_content.strip():
+        click.echo("Warning: Section content will be cleared.", err=True)
 
     result = service_update_section(
         index=ctx.index,
